@@ -40,6 +40,8 @@ export async function queryAllPages(
   return pages;
 }
 
+// --- reads ---
+
 export function readUrl(page: PageObjectResponse, name: string): string {
   const p = prop(page, name);
   return p?.type === "url" ? (p.url ?? "") : "";
@@ -51,20 +53,41 @@ export function readTitle(page: PageObjectResponse, name: string): string {
   return p.title.map((t) => t.plain_text).join("").trim();
 }
 
-export function readRichText(page: PageObjectResponse, name: string): string {
+export function readTitleInlineUrl(
+  page: PageObjectResponse,
+  name: string,
+): string {
   const p = prop(page, name);
-  if (p?.type !== "rich_text") return "";
-  return p.rich_text.map((t) => t.plain_text).join("").trim();
+  if (p?.type !== "title") return "";
+  for (const t of p.title) {
+    if (t.type === "text" && t.text.link?.url) return t.text.link.url;
+  }
+  return "";
 }
 
-export function readSelect(page: PageObjectResponse, name: string): string {
+export function readRelationIds(
+  page: PageObjectResponse,
+  name: string,
+): string[] {
   const p = prop(page, name);
-  return p?.type === "select" ? (p.select?.name ?? "") : "";
+  if (p?.type !== "relation") return [];
+  return p.relation.map((r) => r.id);
+}
+
+export function readNumber(page: PageObjectResponse, name: string): number | null {
+  const p = prop(page, name);
+  return p?.type === "number" ? p.number : null;
 }
 
 export function hasCover(page: PageObjectResponse): boolean {
   return page.cover != null;
 }
+
+export function hasIcon(page: PageObjectResponse): boolean {
+  return page.icon != null;
+}
+
+// --- file upload ---
 
 export async function uploadFile(
   filePath: string,
@@ -103,6 +126,8 @@ export async function uploadFile(
   return upload.id;
 }
 
+// --- page-level writes (icon/cover) ---
+
 export async function setCoverFromUpload(
   pageId: string,
   uploadId: string,
@@ -116,6 +141,22 @@ export async function setCoverFromUpload(
     "pages.update(cover)",
   );
 }
+
+export async function setIconFromUpload(
+  pageId: string,
+  uploadId: string,
+): Promise<void> {
+  await withRetry(
+    () =>
+      notion.pages.update({
+        page_id: pageId,
+        icon: { type: "file_upload", file_upload: { id: uploadId } },
+      }),
+    "pages.update(icon)",
+  );
+}
+
+// --- property writes ---
 
 export async function setTitle(
   pageId: string,
@@ -134,7 +175,7 @@ export async function setTitle(
   );
 }
 
-export async function setSelect(
+export async function setUrlProp(
   pageId: string,
   name: string,
   value: string,
@@ -143,25 +184,86 @@ export async function setSelect(
     () =>
       notion.pages.update({
         page_id: pageId,
-        properties: { [name]: { select: { name: value } } },
+        properties: { [name]: { url: value } },
       }),
-    "pages.update(select)",
+    "pages.update(url)",
   );
 }
 
-export async function setRichText(
+export async function setNumber(
   pageId: string,
   name: string,
-  value: string,
+  value: number,
+): Promise<void> {
+  await withRetry(
+    () =>
+      notion.pages.update({
+        page_id: pageId,
+        properties: { [name]: { number: value } },
+      }),
+    "pages.update(number)",
+  );
+}
+
+export async function setRelation(
+  pageId: string,
+  name: string,
+  targetPageIds: string[],
 ): Promise<void> {
   await withRetry(
     () =>
       notion.pages.update({
         page_id: pageId,
         properties: {
-          [name]: { rich_text: [{ type: "text", text: { content: value } }] },
+          [name]: { relation: targetPageIds.map((id) => ({ id })) },
         },
       }),
-    "pages.update(rich_text)",
+    "pages.update(relation)",
   );
+}
+
+// --- channel-page creation ---
+
+export interface CreateChannelInput {
+  channelsDataSourceId: string;
+  titleProp: string;
+  urlProp: string;
+  name: string;
+  url: string;
+  iconUploadId: string;
+  coverUploadId: string | null;
+}
+
+export async function createChannelPage(
+  input: CreateChannelInput,
+): Promise<string> {
+  const created = await withRetry(
+    () =>
+      notion.pages.create({
+        parent: {
+          type: "data_source_id",
+          data_source_id: input.channelsDataSourceId,
+        },
+        icon: {
+          type: "file_upload",
+          file_upload: { id: input.iconUploadId },
+        },
+        ...(input.coverUploadId
+          ? {
+              cover: {
+                type: "file_upload",
+                file_upload: { id: input.coverUploadId },
+              },
+            }
+          : {}),
+        properties: {
+          [input.titleProp]: {
+            title: [{ type: "text", text: { content: input.name } }],
+          },
+          [input.urlProp]: { url: input.url },
+        },
+      }),
+    "pages.create(channel)",
+  );
+  return created.id;
 }

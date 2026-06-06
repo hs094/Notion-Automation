@@ -1,10 +1,11 @@
 import { $ } from "bun";
-import { mkdtemp, rm, readdir } from "node:fs/promises";
+import { mkdtemp, rm, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const TITLE_FMT = "%(title)s";
 const CHANNEL_FMT = "%(channel,uploader)s";
+const CHANNEL_URL_FMT = "%(channel_url,uploader_url)s";
 
 export interface Thumbnail {
   path: string;
@@ -14,6 +15,7 @@ export interface Thumbnail {
 export interface VideoInfo {
   title: string;
   channel: string;
+  channelUrl: string;
   thumbnail: Thumbnail | null;
   cleanup: () => Promise<void>;
 }
@@ -22,8 +24,8 @@ export async function fetchVideoInfo(url: string): Promise<VideoInfo> {
   const dir = await mkdtemp(join(tmpdir(), "yt-info-"));
   try {
     const proc =
-      await $`yt-dlp --no-simulate --write-thumbnail --skip-download --convert-thumbnails jpg --print ${TITLE_FMT} --print ${CHANNEL_FMT} -o ${join(dir, "thumb.%(ext)s")} ${url}`.quiet();
-    const [title = "", channel = ""] = proc
+      await $`yt-dlp --no-simulate --write-thumbnail --skip-download --convert-thumbnails jpg --print ${TITLE_FMT} --print ${CHANNEL_FMT} --print ${CHANNEL_URL_FMT} -o ${join(dir, "thumb.%(ext)s")} ${url}`.quiet();
+    const [title = "", channel = "", channelUrl = ""] = proc
       .text()
       .split("\n")
       .map((s) => s.trim())
@@ -38,7 +40,90 @@ export async function fetchVideoInfo(url: string): Promise<VideoInfo> {
     return {
       title,
       channel,
+      channelUrl,
       thumbnail,
+      cleanup: () => rm(dir, { recursive: true, force: true }),
+    };
+  } catch (err) {
+    await rm(dir, { recursive: true, force: true });
+    throw err;
+  }
+}
+
+// --- channel thumbnails ---
+
+interface YtThumb {
+  id?: string;
+  url: string;
+  width?: number;
+  height?: number;
+}
+
+function area(t: YtThumb): number {
+  return (t.width ?? 0) * (t.height ?? 0);
+}
+
+function pickByIdOrShape(
+  thumbs: YtThumb[],
+  idMarker: string,
+  shape: (t: YtThumb) => boolean,
+): YtThumb | undefined {
+  const exact = thumbs.find((t) => t.id === idMarker);
+  if (exact) return exact;
+  return thumbs.filter(shape).sort((a, b) => area(b) - area(a))[0];
+}
+
+async function downloadTo(url: string, outPath: string): Promise<void> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`thumbnail download ${res.status}`);
+  await writeFile(outPath, new Uint8Array(await res.arrayBuffer()));
+}
+
+export interface ChannelInfo {
+  avatarPath: string;
+  bannerPath: string | null;
+  cleanup: () => Promise<void>;
+}
+
+export async function fetchChannelInfo(channelUrl: string): Promise<ChannelInfo> {
+  const dir = await mkdtemp(join(tmpdir(), "yt-channel-"));
+  try {
+    const proc =
+      await $`yt-dlp --playlist-items 0 --dump-single-json ${channelUrl}`.quiet();
+    const meta = JSON.parse(proc.text()) as { thumbnails?: YtThumb[] };
+    const thumbs = meta.thumbnails ?? [];
+
+    const avatar = pickByIdOrShape(
+      thumbs,
+      "avatar_uncropped",
+      (t) =>
+        typeof t.width === "number" &&
+        typeof t.height === "number" &&
+        t.width === t.height,
+    );
+    if (!avatar) throw new Error("no avatar thumbnail found");
+
+    const banner = pickByIdOrShape(
+      thumbs,
+      "banner_uncropped",
+      (t) =>
+        typeof t.width === "number" &&
+        typeof t.height === "number" &&
+        t.width > t.height * 2,
+    );
+
+    const avatarPath = join(dir, "avatar.jpg");
+    await downloadTo(avatar.url, avatarPath);
+
+    let bannerPath: string | null = null;
+    if (banner) {
+      bannerPath = join(dir, "banner.jpg");
+      await downloadTo(banner.url, bannerPath);
+    }
+
+    return {
+      avatarPath,
+      bannerPath,
       cleanup: () => rm(dir, { recursive: true, force: true }),
     };
   } catch (err) {
