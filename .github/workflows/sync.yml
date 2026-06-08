@@ -17,9 +17,15 @@ jobs:
           sudo chmod a+rx /usr/local/bin/yt-dlp
           yt-dlp --version
       - run: bun install --frozen-lockfile
+      - name: Write YouTube cookies
+        if: ${{ secrets.YT_COOKIES != '' }}
+        env:
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+        run: printf '%s' "$YT_COOKIES" > "$RUNNER_TEMP/yt-cookies.txt"
       - run: bun run sync:youtube
         env:
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           NOTION_DATA_SOURCE_ID: ${{ secrets.NOTION_DATA_SOURCE_ID }}
           NOTION_CHANNELS_DATA_SOURCE_ID: ${{ secrets.NOTION_CHANNELS_DATA_SOURCE_ID }}
+          YT_COOKIES_FILE: ${{ secrets.YT_COOKIES != '' && format('{0}/yt-cookies.txt', runner.temp) || '' }}
     

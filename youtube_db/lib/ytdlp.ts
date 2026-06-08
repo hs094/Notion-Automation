@@ -7,6 +7,12 @@ const TITLE_FMT = "%(title)s";
 const CHANNEL_FMT = "%(channel,uploader)s";
 const CHANNEL_URL_FMT = "%(channel_url,uploader_url)s";
 
+// Pass YouTube cookies to bypass "Sign in to confirm you're not a bot"
+// challenges on datacenter IPs (e.g. CI runners). Set YT_COOKIES_FILE to a
+// Netscape-format cookie file.
+const COOKIES_FILE = process.env.YT_COOKIES_FILE;
+const COOKIE_ARGS = COOKIES_FILE ? ["--cookies", COOKIES_FILE] : [];
+
 export interface Thumbnail {
   path: string;
   filename: string;
@@ -42,7 +48,7 @@ export async function fetchVideoInfo(url: string): Promise<VideoInfo> {
     let proc;
     try {
       proc =
-        await $`yt-dlp --no-simulate --write-thumbnail --skip-download --convert-thumbnails jpg --print ${TITLE_FMT} --print ${CHANNEL_FMT} --print ${CHANNEL_URL_FMT} -o ${join(dir, "thumb.%(ext)s")} ${url}`.quiet();
+        await $`yt-dlp ${COOKIE_ARGS} --no-simulate --write-thumbnail --skip-download --convert-thumbnails jpg --print ${TITLE_FMT} --print ${CHANNEL_FMT} --print ${CHANNEL_URL_FMT} -o ${join(dir, "thumb.%(ext)s")} ${url}`.quiet();
     } catch (err) {
       throw ytdlpError(err);
     }
@@ -112,7 +118,7 @@ export async function fetchChannelInfo(channelUrl: string): Promise<ChannelInfo>
     let proc;
     try {
       proc =
-        await $`yt-dlp --playlist-items 0 --dump-single-json ${channelUrl}`.quiet();
+        await $`yt-dlp ${COOKIE_ARGS} --playlist-items 0 --dump-single-json ${channelUrl}`.quiet();
     } catch (err) {
       throw ytdlpError(err);
     }
