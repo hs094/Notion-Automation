@@ -12,6 +12,22 @@ export interface Thumbnail {
   filename: string;
 }
 
+interface ShellError {
+  exitCode?: number;
+  stderr?: Buffer;
+  message: string;
+}
+
+function ytdlpError(err: unknown): Error {
+  const e = err as ShellError;
+  const stderr = e.stderr?.toString().trim();
+  if (stderr) {
+    const lastLine = stderr.split("\n").filter(Boolean).at(-1) ?? stderr;
+    return new Error(lastLine);
+  }
+  return new Error(e.message ?? String(err));
+}
+
 export interface VideoInfo {
   title: string;
   channel: string;
@@ -23,8 +39,13 @@ export interface VideoInfo {
 export async function fetchVideoInfo(url: string): Promise<VideoInfo> {
   const dir = await mkdtemp(join(tmpdir(), "yt-info-"));
   try {
-    const proc =
-      await $`yt-dlp --no-simulate --write-thumbnail --skip-download --convert-thumbnails jpg --print ${TITLE_FMT} --print ${CHANNEL_FMT} --print ${CHANNEL_URL_FMT} -o ${join(dir, "thumb.%(ext)s")} ${url}`.quiet();
+    let proc;
+    try {
+      proc =
+        await $`yt-dlp --no-simulate --write-thumbnail --skip-download --convert-thumbnails jpg --print ${TITLE_FMT} --print ${CHANNEL_FMT} --print ${CHANNEL_URL_FMT} -o ${join(dir, "thumb.%(ext)s")} ${url}`.quiet();
+    } catch (err) {
+      throw ytdlpError(err);
+    }
     const [title = "", channel = "", channelUrl = ""] = proc
       .text()
       .split("\n")
@@ -88,8 +109,13 @@ export interface ChannelInfo {
 export async function fetchChannelInfo(channelUrl: string): Promise<ChannelInfo> {
   const dir = await mkdtemp(join(tmpdir(), "yt-channel-"));
   try {
-    const proc =
-      await $`yt-dlp --playlist-items 0 --dump-single-json ${channelUrl}`.quiet();
+    let proc;
+    try {
+      proc =
+        await $`yt-dlp --playlist-items 0 --dump-single-json ${channelUrl}`.quiet();
+    } catch (err) {
+      throw ytdlpError(err);
+    }
     const meta = JSON.parse(proc.text()) as { thumbnails?: YtThumb[] };
     const thumbs = meta.thumbnails ?? [];
 
