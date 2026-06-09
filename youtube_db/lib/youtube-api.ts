@@ -55,7 +55,10 @@ export async function fetchVideoInfo(url: string): Promise<VideoInfo> {
   try {
     const apiUrl = `${API_BASE}/videos?part=snippet&id=${videoId}&key=${API_KEY}`;
     const res = await fetch(apiUrl);
-    if (!res.ok) throw new Error(`YouTube API error: ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "(no body)");
+      throw new Error(`YouTube API error: ${res.status} — ${body}`);
+    }
     const data = (await res.json()) as {
       items?: { snippet?: { title?: string; channelTitle?: string; channelId?: string; thumbnails?: Record<string, YtThumbEntry> } }[];
     };
@@ -101,7 +104,10 @@ export async function fetchChannelInfo(channelUrl: string): Promise<ChannelInfoR
   try {
     const apiUrl = `${API_BASE}/channels?part=snippet,brandingSettings&id=${channelId}&key=${API_KEY}`;
     const res = await fetch(apiUrl);
-    if (!res.ok) throw new Error(`YouTube API error: ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "(no body)");
+      throw new Error(`YouTube API error: ${res.status} — ${body}`);
+    }
     const data = (await res.json()) as {
       items?: { snippet?: { thumbnails?: Record<string, YtThumbEntry> }; brandingSettings?: { image?: { bannerExternalUrl?: string } } }[];
     };

@@ -8,7 +8,7 @@ import {
 } from "./youtube-api.ts";
 
 export function createVideoSource(source: string) {
-  const useApi = source === "youtube_api";
+  const useApi = source.trim() === "youtube_api";
   return {
     fetchVideoInfo: useApi ? apiFetchVideoInfo : ytFetchVideoInfo,
     fetchChannelInfo: useApi ? apiFetchChannelInfo : ytFetchChannelInfo,

@@ -215,7 +215,7 @@ for (const page of videos) {
   try {
     info = await fetchVideoInfo(link);
   } catch (err) {
-    console.log(`  yt-dlp error: ${(err as Error).message}`);
+    console.log(`  ${YT_SOURCE} error: ${(err as Error).message}`);
     failed++;
     continue;
   }
