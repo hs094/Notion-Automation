@@ -16,8 +16,13 @@ import {
   setRelation,
   createChannelPage,
 } from "./lib/notion.ts";
-import { fetchVideoInfo, fetchChannelInfo } from "./lib/ytdlp.ts";
-import type { ChannelInfo } from "./lib/ytdlp.ts";
+import { fetchVideoInfo, fetchChannelInfo } from "./lib/video-source.ts";
+import type { ChannelInfo } from "./lib/video-source.ts";
+
+const YT_SOURCE = process.env.YT_SOURCE ?? "ytdlp";
+if (YT_SOURCE === "youtube_api" && !process.env.YT_API_KEY) {
+  throw new Error("YT_API_KEY is required when YT_SOURCE=youtube_api");
+}
 
 const VIDEOS_DS = process.env.NOTION_DATA_SOURCE_ID;
 if (!VIDEOS_DS) throw new Error("NOTION_DATA_SOURCE_ID is required");
