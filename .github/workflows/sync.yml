@@ -2,7 +2,7 @@ name: Youtube DB Sync Job
 
 on:
   schedule:
-     - cron: 0 * * * *
+     - cron: 30 15 * * *
   workflow_dispatch:
 
 jobs:
