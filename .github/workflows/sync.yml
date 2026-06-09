@@ -17,5 +17,6 @@ jobs:
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           NOTION_DATA_SOURCE_ID: ${{ secrets.NOTION_DATA_SOURCE_ID }}
           NOTION_CHANNELS_DATA_SOURCE_ID: ${{ secrets.NOTION_CHANNELS_DATA_SOURCE_ID }}
+          YT_SOURCE: ${{ vars.YT_SOURCE }}
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
     
