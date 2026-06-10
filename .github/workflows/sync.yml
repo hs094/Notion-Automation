@@ -1,10 +1,8 @@
 name: Youtube DB Sync Job
-
 on:
+  workflow_dispatch:   # ← add this; won't affect cron at all
   schedule:
-     - cron: 30 15 * * *
-  workflow_dispatch:
-
+    - cron: '0 * * * *'
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -19,4 +17,3 @@ jobs:
           NOTION_CHANNELS_DATA_SOURCE_ID: ${{ secrets.NOTION_CHANNELS_DATA_SOURCE_ID }}
           YT_SOURCE: ${{ vars.YT_SOURCE }}
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
-    
