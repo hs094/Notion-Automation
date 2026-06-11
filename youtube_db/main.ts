@@ -17,6 +17,61 @@ import {
 import { createVideoSource } from "./lib/video-source.ts";
 import type { ChannelInfo } from "./lib/video-source.ts";
 
+// --- terminal styling (zero-dep ANSI) ---
+
+const useColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+const sgr = (code: string) => (s: string) =>
+  useColor ? `\x1b[${code}m${s}\x1b[0m` : s;
+const c = {
+  bold: sgr("1"),
+  dim: sgr("2"),
+  red: sgr("31"),
+  green: sgr("32"),
+  yellow: sgr("33"),
+  blue: sgr("34"),
+  magenta: sgr("35"),
+  cyan: sgr("36"),
+  gray: sgr("90"),
+};
+
+// visible length, ignoring ANSI escapes
+const visLen = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "").length;
+const padEnd = (s: string, w: number) => s + " ".repeat(Math.max(0, w - visLen(s)));
+const padStart = (s: string, w: number) => " ".repeat(Math.max(0, w - visLen(s))) + s;
+
+function banner(title: string): void {
+  const inner = ` ${title} `;
+  const line = "─".repeat(visLen(inner));
+  console.log(c.cyan(`┌${line}┐`));
+  console.log(c.cyan("│") + c.bold(inner) + c.cyan("│"));
+  console.log(c.cyan(`└${line}┘`));
+}
+
+// two-column key/value table; rows of [label, value, optional color fn]
+function summaryTable(
+  rows: [string, string, ((s: string) => string)?][],
+  ruleBefore?: number,
+): void {
+  const labelW = Math.max(...rows.map((r) => visLen(r[0])));
+  const valueW = Math.max(...rows.map((r) => visLen(r[1])));
+  const top = `┌${"─".repeat(labelW + 2)}┬${"─".repeat(valueW + 2)}┐`;
+  const mid = `├${"─".repeat(labelW + 2)}┼${"─".repeat(valueW + 2)}┤`;
+  const bot = `└${"─".repeat(labelW + 2)}┴${"─".repeat(valueW + 2)}┘`;
+  console.log(c.gray(top));
+  rows.forEach(([label, value, paint], i) => {
+    if (ruleBefore === i) console.log(c.gray(mid));
+    const v = paint ? paint(padStart(value, valueW)) : padStart(value, valueW);
+    console.log(
+      c.gray("│ ") +
+        c.bold(padEnd(label, labelW)) +
+        c.gray(" │ ") +
+        v +
+        c.gray(" │"),
+    );
+  });
+  console.log(c.gray(bot));
+}
+
 const YT_SOURCE = process.env.YT_SOURCE ?? "ytdlp";
 if (YT_SOURCE === "youtube_api" && !process.env.YT_API_KEY) {
   throw new Error("YT_API_KEY is required when using YouTube Data API");
@@ -92,7 +147,7 @@ async function resolveChannel(
     if (existing.urlPropEmpty) {
       await setUrlProp(existing.pageId, CHANNEL_URL_PROP, channelUrl);
       existing.urlPropEmpty = false;
-      console.log(`    channel URL backfilled`);
+      console.log(c.gray(`    ↳ channel URL backfilled`));
     }
     const wantTitleRewrite =
       (channelName && existing.name !== channelName) ||
@@ -101,10 +156,10 @@ async function resolveChannel(
       const finalName = channelName || existing.name;
       await setTitle(existing.pageId, CHANNEL_TITLE_PROP, finalName);
       if (existing.titleHasInlineLink) {
-        console.log(`    channel title stripped of inline link`);
+        console.log(c.gray(`    ↳ channel title stripped of inline link`));
       }
       if (channelName && existing.name !== channelName) {
-        console.log(`    channel renamed: ${existing.name} → ${channelName}`);
+        console.log(c.gray(`    ↳ channel renamed: ${existing.name} → ${channelName}`));
       }
       existing.name = finalName;
       existing.titleHasInlineLink = false;
@@ -120,7 +175,7 @@ async function resolveChannel(
           );
           await setIconFromUpload(existing.pageId, iconId);
           existing.iconMissing = false;
-          console.log(`    channel icon set`);
+          console.log(c.gray(`    ↳ channel icon set`));
         }
         if (existing.coverMissing && cInfo.bannerPath) {
           const coverId = await uploadFile(
@@ -130,10 +185,10 @@ async function resolveChannel(
           );
           await setCoverFromUpload(existing.pageId, coverId);
           existing.coverMissing = false;
-          console.log(`    channel cover set`);
+          console.log(c.gray(`    ↳ channel cover set`));
         }
       } catch (err) {
-        console.log(`    channel thumb error: ${(err as Error).message}`);
+        console.log(`    ${c.red("✗")} channel thumb error: ${(err as Error).message}`);
       }
     }
     return existing.pageId;
@@ -155,7 +210,7 @@ async function resolveChannel(
     iconUploadId: iconId,
     coverUploadId: coverId,
   });
-  console.log(`    channel created: ${channelName}`);
+  console.log(`    ${c.green("✓")} channel created: ${channelName}`);
   index.set(key, {
     pageId: newId,
     name: channelName,
@@ -169,11 +224,15 @@ async function resolveChannel(
 
 // --- run ---
 
+banner("YouTube → Notion Sync");
+console.log(c.dim(`  source: ${YT_SOURCE}`));
+console.log();
+
 const channelIndex = await loadChannelIndex();
-console.log(`Channel index: ${channelIndex.size} channel(s)`);
+console.log(`${c.cyan("●")} Channel index  ${c.bold(String(channelIndex.size))} channel(s)`);
 
 const videos = await queryAllPages(VIDEOS_DS);
-console.log(`Found ${videos.length} video page(s)`);
+console.log(`${c.cyan("●")} Video pages    ${c.bold(String(videos.length))} found`);
 
 let updated = 0;
 let skipped = 0;
@@ -202,13 +261,14 @@ for (const page of videos) {
   ]
     .filter(Boolean)
     .join(", ");
-  console.log(`\n→ ${link}\n  fetching (${wants})`);
+  console.log(`\n${c.blue("→")} ${c.bold(link)}`);
+  console.log(c.dim(`  fetching (${wants})`));
 
   let info;
   try {
     info = await fetchVideoInfo(link);
   } catch (err) {
-    console.log(`  ${YT_SOURCE} error: ${(err as Error).message}`);
+    console.log(`  ${c.red("✗")} ${YT_SOURCE} error: ${(err as Error).message}`);
     failed++;
     continue;
   }
@@ -216,7 +276,7 @@ for (const page of videos) {
   try {
     if (needsTitle && info.title) {
       await setTitle(page.id, TITLE_PROP, info.title);
-      console.log(`  title  ← ${info.title}`);
+      console.log(`  ${c.green("✓")} title    ${c.dim("←")} ${info.title}`);
     }
     if (needsCover && info.thumbnail) {
       const uploadId = await uploadFile(
@@ -224,7 +284,7 @@ for (const page of videos) {
         info.thumbnail.filename,
       );
       await setCoverFromUpload(page.id, uploadId);
-      console.log(`  cover  ← ${info.thumbnail.filename}`);
+      console.log(`  ${c.green("✓")} cover    ${c.dim("←")} ${info.thumbnail.filename}`);
     }
     if (needsChannel && info.channelUrl) {
       const channelPageId = await resolveChannel(
@@ -233,24 +293,30 @@ for (const page of videos) {
         info.channel,
       );
       await setRelation(page.id, CHANNEL_PAGE_PROP, [channelPageId]);
-      console.log(`  channel relation ← ${info.channel || info.channelUrl}`);
+      console.log(`  ${c.green("✓")} channel  ${c.dim("←")} ${info.channel || info.channelUrl}`);
     }
     updated++;
   } catch (err) {
-    console.log(`  notion error: ${(err as Error).message}`);
+    console.log(`  ${c.red("✗")} notion error: ${(err as Error).message}`);
     failed++;
   } finally {
     await info.cleanup();
   }
 }
 
-const now = new Date();
-console.log("Last Run on: " + now.toLocaleString())
-
 for (const info of channelInfoCache.values()) {
   await info.cleanup();
 }
 
-console.log(
-  `\nDone. updated=${updated} skipped=${skipped} failed=${failed} total=${videos.length}`,
+const now = new Date();
+console.log();
+summaryTable(
+  [
+    ["Updated", String(updated), updated > 0 ? c.green : c.gray],
+    ["Skipped", String(skipped), c.yellow],
+    ["Failed", String(failed), failed > 0 ? c.red : c.gray],
+    ["Total", String(videos.length), c.bold],
+  ],
+  3,
 );
+console.log(c.dim(`  last run: ${now.toLocaleString()}`));
