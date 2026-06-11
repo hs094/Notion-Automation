@@ -4,7 +4,6 @@ import {
   readTitle,
   readTitleInlineUrl,
   readRelationIds,
-  readNumber,
   hasCover,
   hasIcon,
   uploadFile,
@@ -12,7 +11,6 @@ import {
   setIconFromUpload,
   setTitle,
   setUrlProp,
-  setNumber,
   setRelation,
   createChannelPage,
 } from "./lib/notion.ts";
@@ -20,7 +18,6 @@ import { createVideoSource } from "./lib/video-source.ts";
 import type { ChannelInfo } from "./lib/video-source.ts";
 
 const YT_SOURCE = process.env.YT_SOURCE ?? "ytdlp";
-console.log(YT_SOURCE)
 if (YT_SOURCE === "youtube_api" && !process.env.YT_API_KEY) {
   throw new Error("YT_API_KEY is required when using YouTube Data API");
 }
@@ -37,7 +34,6 @@ const CHANNEL_PAGE_PROP =
   process.env.NOTION_CHANNEL_PAGE_PROP || "Channel Page";
 const CHANNEL_URL_PROP = "URL";
 const CHANNEL_TITLE_PROP = "Name";
-const CHANNEL_COUNT_PROP = "Videos";
 
 function normalizeUrl(u: string): string {
   return u.trim().replace(/\/+$/, "").toLowerCase();
@@ -50,7 +46,6 @@ interface ChannelRecord {
   titleHasInlineLink: boolean;
   iconMissing: boolean;
   coverMissing: boolean;
-  currentCount: number;
 }
 
 async function loadChannelIndex(): Promise<Map<string, ChannelRecord>> {
@@ -68,7 +63,6 @@ async function loadChannelIndex(): Promise<Map<string, ChannelRecord>> {
       titleHasInlineLink: !!inlineUrl,
       iconMissing: !hasIcon(page),
       coverMissing: !hasCover(page),
-      currentCount: readNumber(page, CHANNEL_COUNT_PROP) ?? 0,
     });
   }
   return idx;
@@ -152,8 +146,10 @@ async function resolveChannel(
     : null;
   const newId = await createChannelPage({
     channelsDataSourceId: CHANNELS_DS!,
+    videosDataSourceId: VIDEOS_DS!,
     titleProp: CHANNEL_TITLE_PROP,
     urlProp: CHANNEL_URL_PROP,
+    channelPageProp: CHANNEL_PAGE_PROP,
     name: channelName || channelUrl,
     url: channelUrl,
     iconUploadId: iconId,
@@ -167,7 +163,6 @@ async function resolveChannel(
     titleHasInlineLink: false,
     iconMissing: false,
     coverMissing: !coverId,
-    currentCount: 0,
   });
   return newId;
 }
@@ -183,8 +178,6 @@ console.log(`Found ${videos.length} video page(s)`);
 let updated = 0;
 let skipped = 0;
 let failed = 0;
-
-const resolvedChannelId = new Map<string, string>();
 
 for (const page of videos) {
   const link = readUrl(page, LINK_PROP);
@@ -240,7 +233,6 @@ for (const page of videos) {
         info.channel,
       );
       await setRelation(page.id, CHANNEL_PAGE_PROP, [channelPageId]);
-      resolvedChannelId.set(page.id, channelPageId);
       console.log(`  channel relation ← ${info.channel || info.channelUrl}`);
     }
     updated++;
@@ -252,30 +244,8 @@ for (const page of videos) {
   }
 }
 
-// --- recompute channel video counts ---
-
-const counts = new Map<string, number>();
-for (const video of videos) {
-  let id = resolvedChannelId.get(video.id);
-  if (!id) {
-    const ids = readRelationIds(video, CHANNEL_PAGE_PROP);
-    id = ids[0];
-  }
-  if (!id) continue;
-  counts.set(id, (counts.get(id) ?? 0) + 1);
-}
-
-let countsUpdated = 0;
-for (const channel of channelIndex.values()) {
-  const count = counts.get(channel.pageId) ?? 0;
-  if (count !== channel.currentCount) {
-    await setNumber(channel.pageId, CHANNEL_COUNT_PROP, count);
-    countsUpdated++;
-  }
-}
-if (countsUpdated > 0) {
-  console.log(`\nChannel video counts: ${countsUpdated} updated`);
-}
+const now = new Date();
+console.log("Last Run on: " + now.toLocaleString())
 
 for (const info of channelInfoCache.values()) {
   await info.cleanup();

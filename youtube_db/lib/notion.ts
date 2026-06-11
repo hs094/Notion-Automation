@@ -74,11 +74,6 @@ export function readRelationIds(
   return p.relation.map((r) => r.id);
 }
 
-export function readNumber(page: PageObjectResponse, name: string): number | null {
-  const p = prop(page, name);
-  return p?.type === "number" ? p.number : null;
-}
-
 export function hasCover(page: PageObjectResponse): boolean {
   return page.cover != null;
 }
@@ -190,21 +185,6 @@ export async function setUrlProp(
   );
 }
 
-export async function setNumber(
-  pageId: string,
-  name: string,
-  value: number,
-): Promise<void> {
-  await withRetry(
-    () =>
-      notion.pages.update({
-        page_id: pageId,
-        properties: { [name]: { number: value } },
-      }),
-    "pages.update(number)",
-  );
-}
-
 export async function setRelation(
   pageId: string,
   name: string,
@@ -226,8 +206,10 @@ export async function setRelation(
 
 export interface CreateChannelInput {
   channelsDataSourceId: string;
+  videosDataSourceId: string;
   titleProp: string;
   urlProp: string;
+  channelPageProp: string;
   name: string;
   url: string;
   iconUploadId: string;
@@ -265,5 +247,47 @@ export async function createChannelPage(
       }),
     "pages.create(channel)",
   );
+  await createChannelVideoView({
+    videosDataSourceId: input.videosDataSourceId,
+    channelPageId: created.id,
+    channelPageProp: input.channelPageProp,
+    name: input.name,
+  });
   return created.id;
+}
+
+export interface CreateChannelVideoViewInput {
+  videosDataSourceId: string;
+  channelPageId: string;
+  channelPageProp: string;
+  name: string;
+}
+
+// Creates a gallery view inside the channel page showing the videos
+// watched from that channel (filtered by the Channel Page relation).
+export async function createChannelVideoView(
+  input: CreateChannelVideoViewInput,
+): Promise<void> {
+  await withRetry(
+    () =>
+      notion.views.create({
+        data_source_id: input.videosDataSourceId,
+        name: `${input.name}'s Video's DB`,
+        type: "gallery",
+        create_database: {
+          parent: { type: "page_id", page_id: input.channelPageId },
+        },
+        // The SDK types the view filter as Record<string, never>; the API
+        // accepts a relation property filter, so cast past the stub type.
+        filter: {
+          property: input.channelPageProp,
+          relation: { contains: input.channelPageId },
+        } as unknown as Record<string, never>,
+        configuration: {
+          type: "gallery",
+          cover: { type: "page_cover" },
+        },
+      }),
+    "views.create(gallery)",
+  );
 }
