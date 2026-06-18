@@ -18,24 +18,38 @@ function prop(page: PageObjectResponse, name: string): PageProperty | undefined 
   return page.properties[name];
 }
 
+export async function queryPageBatch(
+  dataSourceId: string,
+  pageSize: number,
+  startCursor?: string,
+): Promise<{ pages: PageObjectResponse[]; nextCursor?: string }> {
+  const res = await withRetry(
+    () =>
+      notion.dataSources.query({
+        data_source_id: dataSourceId,
+        page_size: pageSize,
+        start_cursor: startCursor,
+        sorts: [{ timestamp: "last_edited_time", direction: "descending" }],
+      }),
+    "dataSources.query",
+  );
+  return {
+    pages: res.results.filter(
+      (r): r is PageObjectResponse => r.object === "page" && "properties" in r,
+    ),
+    nextCursor: res.has_more && res.next_cursor ? res.next_cursor : undefined,
+  };
+}
+
 export async function queryAllPages(
   dataSourceId: string,
 ): Promise<PageObjectResponse[]> {
   const pages: PageObjectResponse[] = [];
   let cursor: string | undefined;
   do {
-    const res = await withRetry(
-      () =>
-        notion.dataSources.query({
-          data_source_id: dataSourceId,
-          start_cursor: cursor,
-        }),
-      "dataSources.query",
-    );
-    for (const r of res.results) {
-      if (r.object === "page" && "properties" in r) pages.push(r);
-    }
-    cursor = res.has_more && res.next_cursor ? res.next_cursor : undefined;
+    const batch = await queryPageBatch(dataSourceId, 100, cursor);
+    pages.push(...batch.pages);
+    cursor = batch.nextCursor;
   } while (cursor);
   return pages;
 }
@@ -148,6 +162,13 @@ export async function setIconFromUpload(
         icon: { type: "file_upload", file_upload: { id: uploadId } },
       }),
     "pages.update(icon)",
+  );
+}
+
+export async function trashPage(pageId: string): Promise<void> {
+  await withRetry(
+    () => notion.pages.update({ page_id: pageId, in_trash: true }),
+    "pages.update(trash)",
   );
 }
 
