@@ -20,7 +20,6 @@ youtube_db/
 │   ├── ytdlp.ts        # yt-dlp metadata + channel thumbnails
 │   └── retry.ts        # shared backoff/retry helpers
 ├── ARCHITECTURE.md
-├── .env.example
 └── README.md
 ```
 
@@ -34,8 +33,10 @@ youtube_db/
 
 ## Env
 
+Managed via Doppler CLI (`notion-automation` / `prd`). `doppler run` injects at runtime.
+
 ```env
-NOTION_API_KEY=secret_...
+YT_DB_NOTION_API_KEY=secret_...           # Doppler: YT_DB_NOTION_API_KEY
 NOTION_DATA_SOURCE_ID=...                 # Videos DS
 NOTION_CHANNELS_DATA_SOURCE_ID=...        # Channels DS
 
@@ -45,7 +46,7 @@ NOTION_TITLE_PROP=Name
 NOTION_CHANNEL_PAGE_PROP=Channel Page
 ```
 
-See [`.env.example`](./.env.example). Bun auto-loads `.env` from the repo root.
+Setup already scoped (`doppler setup --project notion-automation --config prd`). Run via `doppler run -- bun run sync:youtube` (the `sync:youtube` script already wraps this).
 
 ## Notion schema
 

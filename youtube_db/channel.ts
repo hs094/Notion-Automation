@@ -1,8 +1,10 @@
 // Backfill script: create a filtered video gallery view inside every
 // existing channel page. New channels get this view automatically at
 // creation time (see createChannelPage in lib/notion.ts).
+import { initDoppler } from "./lib/doppler.ts";
 import { queryAllPages, readTitle, createChannelVideoView } from "./lib/notion.ts";
 
+await initDoppler();
 const channelsDataSourceId = process.env.NOTION_CHANNELS_DATA_SOURCE_ID;
 if (!channelsDataSourceId)
   throw new Error("NOTION_CHANNELS_DATA_SOURCE_ID is required");

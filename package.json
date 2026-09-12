@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "sync:youtube": "bun run youtube_db/main.ts",
+    "sync:youtube": "doppler run -- bun run youtube_db/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -14,6 +14,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@dopplerhq/node-sdk": "^1.3.0",
     "@notionhq/client": "^5.22.0"
   }
 }

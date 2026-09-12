@@ -4,12 +4,25 @@ import { withRetry, fetchWithRetry } from "./retry.ts";
 
 export const NOTION_VERSION = "2026-03-11";
 
-const apiKey = process.env.NOTION_API_KEY;
-if (!apiKey) throw new Error("NOTION_API_KEY is required");
+function getApiKey(): string {
+  // ponytail: read lazily so initDoppler() can inject first; support legacy .env name
+  const key = process.env.YT_DB_NOTION_API_KEY ?? process.env.NOTION_API_KEY;
+  if (!key) throw new Error("YT_DB_NOTION_API_KEY is required");
+  return key;
+}
 
-export const notion = new Client({
-  auth: apiKey,
-  notionVersion: NOTION_VERSION,
+let cached: Client | undefined;
+function getClient(): Client {
+  cached ??= new Client({ auth: getApiKey(), notionVersion: NOTION_VERSION });
+  return cached;
+}
+
+// ponytail: Proxy defers Client construction until first use (post-Doppler)
+export const notion: Client = new Proxy({} as Client, {
+  get(_t, p) {
+    const v = (getClient() as unknown as Record<string | symbol, unknown>)[p];
+    return typeof v === "function" ? (v as Function).bind(getClient()) : v;
+  },
 });
 
 type PageProperty = PageObjectResponse["properties"][string];
@@ -124,7 +137,7 @@ export async function uploadFile(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${getApiKey()}`,
         "Notion-Version": NOTION_VERSION,
       },
       body: form,

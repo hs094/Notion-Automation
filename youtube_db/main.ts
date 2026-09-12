@@ -1,3 +1,4 @@
+import { initDoppler } from "./lib/doppler.ts";
 import {
   queryAllPages,
   queryPageBatch,
@@ -19,6 +20,8 @@ import {
 import type { PageObjectResponse } from "@notionhq/client";
 import { createVideoSource } from "./lib/video-source.ts";
 import type { ChannelInfo } from "./lib/video-source.ts";
+
+await initDoppler();
 
 // --- terminal styling (zero-dep ANSI) ---
 

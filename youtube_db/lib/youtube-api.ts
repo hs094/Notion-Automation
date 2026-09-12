@@ -2,7 +2,12 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const API_KEY = process.env.YT_API_KEY;
+function getApiKey(): string {
+  // ponytail: lazy so initDoppler() can inject first
+  const key = process.env.YT_API_KEY;
+  if (!key) throw new Error("YT_API_KEY is required for YouTube API mode");
+  return key;
+}
 const API_BASE = "https://www.googleapis.com/youtube/v3";
 
 export interface Thumbnail {
@@ -36,7 +41,7 @@ function extractVideoId(url: string): string {
   ];
   for (const p of patterns) {
     const m = url.match(p);
-    if (m) return m[1];
+    if (m) return m[1]!;
   }
   throw new Error(`could not extract video ID from: ${url}`);
 }
@@ -44,16 +49,16 @@ function extractVideoId(url: string): string {
 function extractChannelId(url: string): string {
   const m = url.match(/youtube\.com\/channel\/(UC[\w-]{22})/);
   if (!m) throw new Error(`could not extract channel ID from: ${url}`);
-  return m[1];
+  return m[1]!;
 }
 
 export async function fetchVideoInfo(url: string): Promise<VideoInfo> {
-  if (!API_KEY) throw new Error("YT_API_KEY is required for YouTube API mode");
+  const apiKey = getApiKey();
 
   const videoId = extractVideoId(url);
   const dir = await mkdtemp(join(tmpdir(), "yt-info-"));
   try {
-    const apiUrl = `${API_BASE}/videos?part=snippet&id=${videoId}&key=${API_KEY}`;
+    const apiUrl = `${API_BASE}/videos?part=snippet&id=${videoId}&key=${apiKey}`;
     const res = await fetch(apiUrl);
     if (!res.ok) {
       const body = await res.text().catch(() => "(no body)");
@@ -97,12 +102,12 @@ export async function fetchVideoInfo(url: string): Promise<VideoInfo> {
 }
 
 export async function fetchChannelInfo(channelUrl: string): Promise<ChannelInfoResult> {
-  if (!API_KEY) throw new Error("YT_API_KEY is required for YouTube API mode");
+  const apiKey = getApiKey();
 
   const channelId = extractChannelId(channelUrl);
   const dir = await mkdtemp(join(tmpdir(), "yt-channel-"));
   try {
-    const apiUrl = `${API_BASE}/channels?part=snippet,brandingSettings&id=${channelId}&key=${API_KEY}`;
+    const apiUrl = `${API_BASE}/channels?part=snippet,brandingSettings&id=${channelId}&key=${apiKey}`;
     const res = await fetch(apiUrl);
     if (!res.ok) {
       const body = await res.text().catch(() => "(no body)");

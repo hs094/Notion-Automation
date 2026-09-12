@@ -5,6 +5,7 @@
     "": {
       "name": "notion-automation",
       "dependencies": {
+        "@dopplerhq/node-sdk": "^1.3.0",
         "@notionhq/client": "^5.22.0",
       },
       "devDependencies": {
@@ -16,6 +17,8 @@
     },
   },
   "packages": {
+    "@dopplerhq/node-sdk": ["@dopplerhq/node-sdk@1.3.0", "", {}, "sha512-CTi9xqdcauZm3wiQKGdtMzXK8SdvmMV4WTLrWGmTwY7TDBa5dD8YutAorHaVpzv1ojwtcvJBG8xXajFAivow5w=="],
+
     "@notionhq/client": ["@notionhq/client@5.22.0", "", {}, "sha512-lZ3JGBCd6O6MNHWn/58QcUqX1FgmlcODcx/EaUEEpuxLXF5tSi+v29Vzoz8mZ6JgDWDn5pMzzjB69QevYjQQZA=="],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
