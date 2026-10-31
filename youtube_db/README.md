@@ -4,6 +4,7 @@ Sync a Notion database of YouTube videos with metadata pulled from yt-dlp. For e
 
 - **video title** (`Name`)
 - **video cover** (thumbnail upload)
+- **AI Summary** (Gemini summary for the YouTube URL, on pages already pending metadata work)
 - **channel relation** (`Channel Page`) — looks up the channel in a separate Channels DB, creating it if missing, with the channel's **avatar as page icon** and **banner as page cover**
 
 Idempotent: re-runs only touch fields that are still empty.
@@ -52,6 +53,8 @@ Setup already scoped (`doppler setup --project notion-automation --config prd`).
 
 **Videos DS**
 
+The Gemini summary is appended to the page body under an `AI Summary` heading; no summary property is needed.
+
 | Property              | Type                   | Filled by script               |
 | --------------------- | ---------------------- | ------------------------------ |
 | `Link`                | URL                    | no (trigger — must be present) |
@@ -93,8 +96,8 @@ Per video page:
 
 1. Skip if `Link` is empty.
 2. Skip if `Name`, `cover`, and `Channel Page` are all already set.
-3. One yt-dlp call extracts title, channel name, channel URL, and the video thumbnail.
-4. Fill `Name` and `cover` if missing.
+3. One yt-dlp call extracts title, channel name, channel URL, and the video thumbnail; the existing signed-in `browser-data` profile (relative to the repository root) generates the summary.
+4. Append the Gemini summary to the page body if no `AI Summary` heading exists; fill `Name` and `cover` if missing.
 5. Resolve the channel:
    - look up the Channel page by `URL`, falling back to the inline-link URL inside the title for legacy rows
    - if found: backfill `URL` if empty, strip any inline link from the title, rename if the name drifted, add icon/cover if missing

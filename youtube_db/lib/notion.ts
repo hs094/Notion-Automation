@@ -80,6 +80,13 @@ export function readTitle(page: PageObjectResponse, name: string): string {
   return p.title.map((t) => t.plain_text).join("").trim();
 }
 
+export function readRichText(page: PageObjectResponse, name: string): string {
+  const p = prop(page, name);
+  return p?.type === "rich_text"
+    ? p.rich_text.map((t) => t.plain_text).join("").trim()
+    : "";
+}
+
 export function readTitleInlineUrl(
   page: PageObjectResponse,
   name: string,
@@ -185,6 +192,54 @@ export async function trashPage(pageId: string): Promise<void> {
   );
 }
 
+export async function hasPageSummary(pageId: string): Promise<boolean> {
+  let cursor: string | undefined;
+
+  do {
+    const response = await withRetry(
+      () =>
+        notion.blocks.children.list({
+          block_id: pageId,
+          page_size: 100,
+          start_cursor: cursor,
+        }),
+      "blocks.children.list(summary)",
+    );
+    if (
+      response.results.some(
+        (block) =>
+          "heading_2" in block &&
+          block.heading_2.rich_text.map((text) => text.plain_text).join("") ===
+            "AI Summary",
+      )
+    ) {
+      return true;
+    }
+    cursor = response.has_more ? response.next_cursor ?? undefined : undefined;
+  } while (cursor);
+
+  return false;
+}
+
+export async function appendPageSummary(
+  pageId: string,
+  value: string,
+): Promise<void> {
+  await withRetry(
+    () =>
+      notion.pages.updateMarkdown({
+        page_id: pageId,
+        markdown_version: "v1",
+        type: "insert_content",
+        insert_content: {
+          content: `\n\n## AI Summary\n\n${value}`,
+          position: { type: "end" },
+        },
+      }),
+    "pages.updateMarkdown(summary)",
+  );
+}
+
 // --- property writes ---
 
 export async function setTitle(
@@ -201,6 +256,28 @@ export async function setTitle(
         },
       }),
     "pages.update(title)",
+  );
+}
+
+export async function setRichText(
+  pageId: string,
+  name: string,
+  value: string,
+): Promise<void> {
+  await withRetry(
+    () =>
+      notion.pages.update({
+        page_id: pageId,
+        properties: {
+          [name]: {
+            rich_text: (value.match(/[\s\S]{1,2000}/gu) ?? []).map((content) => ({
+              type: "text",
+              text: { content },
+            })),
+          },
+        },
+      }),
+    "pages.update(rich_text)",
   );
 }
 

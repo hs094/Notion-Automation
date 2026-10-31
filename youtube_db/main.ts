@@ -12,6 +12,8 @@ import {
   setCoverFromUpload,
   setIconFromUpload,
   setTitle,
+  hasPageSummary,
+  appendPageSummary,
   setUrlProp,
   setRelation,
   trashPage,
@@ -20,6 +22,9 @@ import {
 import type { PageObjectResponse } from "@notionhq/client";
 import { createVideoSource } from "./lib/video-source.ts";
 import type { ChannelInfo } from "./lib/video-source.ts";
+import { launchBrowser } from "../ai_summary/src/browser.js";
+import { openVideo, validateYouTubeUrl } from "../ai_summary/src/youtube.js";
+import { summarizeVideo } from "../ai_summary/src/gemini.js";
 
 await initDoppler();
 
@@ -359,6 +364,7 @@ const touchedChannels = new Set<string>();
 let updated = 0;
 let skipped = 0;
 let failed = 0;
+let summaryContext: Awaited<ReturnType<typeof launchBrowser>> | undefined;
 
 for (const page of videos) {
   const link = readUrl(page, LINK_PROP);
@@ -369,13 +375,31 @@ for (const page of videos) {
 
   const needsCover = !hasCover(page);
   const needsTitle = !readTitle(page, TITLE_PROP);
+  const needsSummary = !(await hasPageSummary(page.id));
   const existingChannel = readRelationIds(page, CHANNEL_PAGE_PROP);
   const needsChannel = existingChannel.length === 0;
 
-  if (!needsCover && !needsTitle && !needsChannel) {
+  if (!needsCover && !needsTitle && !needsChannel && !needsSummary) {
     skipped++;
     continue;
   }
+
+  console.log(
+    JSON.stringify(
+      {
+        notionPageUrl: page.url,
+        notionPageId: page.id,
+        youtubeUrl: link,
+        createdTime: page.created_time,
+        lastEditedTime: page.last_edited_time,
+        title: readTitle(page, TITLE_PROP),
+        hasCover: hasCover(page),
+        channelRelation: existingChannel,
+      },
+      null,
+      2,
+    ),
+  );
 
   const wants = [
     needsCover && "cover",
@@ -398,6 +422,14 @@ for (const page of videos) {
 
   let channelPageId = existingChannel[0];
   try {
+    if (needsSummary) {
+      summaryContext ??= await launchBrowser();
+      const summaryPage = summaryContext.pages()[0] ?? await summaryContext.newPage();
+      await openVideo(summaryPage, validateYouTubeUrl(link));
+      const summary = await summarizeVideo(summaryPage, summaryContext);
+      await appendPageSummary(page.id, summary);
+      console.log(`  ${c.green("✓")} AI summary saved`);
+    }
     if (needsTitle && info.title) {
       await setTitle(page.id, TITLE_PROP, info.title);
       console.log(`  ${c.green("✓")} title    ${c.dim("←")} ${info.title}`);
@@ -422,12 +454,14 @@ for (const page of videos) {
     if (channelPageId) touchedChannels.add(channelPageId);
     updated++;
   } catch (err) {
-    console.log(`  ${c.red("✗")} notion error: ${(err as Error).message}`);
+    console.log(`  ${c.red("✗")} processing error: ${(err as Error).message}`);
     failed++;
   } finally {
     await info.cleanup();
   }
 }
+
+if (summaryContext) await summaryContext.close();
 
 for (const info of channelInfoCache.values()) {
   await info.cleanup();
