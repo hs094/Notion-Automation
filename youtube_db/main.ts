@@ -384,23 +384,6 @@ for (const page of videos) {
     continue;
   }
 
-  console.log(
-    JSON.stringify(
-      {
-        notionPageUrl: page.url,
-        notionPageId: page.id,
-        youtubeUrl: link,
-        createdTime: page.created_time,
-        lastEditedTime: page.last_edited_time,
-        title: readTitle(page, TITLE_PROP),
-        hasCover: hasCover(page),
-        channelRelation: existingChannel,
-      },
-      null,
-      2,
-    ),
-  );
-
   const wants = [
     needsCover && "cover",
     needsTitle && "title",

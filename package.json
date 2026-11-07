@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "sync:youtube": "doppler run -- bun run youtube_db/main.ts",
+    "sync:youtube": "bun run youtube_db/main.ts",
     "login": "tsx ai_summary/src/index.ts login",
     "open": "tsx ai_summary/src/index.ts open",
     "typecheck": "tsc --noEmit"
